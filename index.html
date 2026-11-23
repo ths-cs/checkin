@@ -101,12 +101,20 @@ input{
 .corner:disabled{ cursor:default; }
 .corner:disabled:not(.on){ opacity:.55; }
 .corner.right{ outline:4px solid var(--live); outline-offset:2px; }
+.corner.miss .cn::after{ content:" ✕"; font-size:24px; }
+.corner:disabled.right{ opacity:1; }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]) .corner[data-c="0"]{ --cc:#5B8FE8; }
   :root:not([data-theme="light"]) .corner[data-c="1"]{ --cc:#E5B65A; }
   :root:not([data-theme="light"]) .corner[data-c="2"]{ --cc:#4CC47E; }
   :root:not([data-theme="light"]) .corner[data-c="3"]{ --cc:#9D7BE0; }
 }
+.rules{ margin:18px 0 0; padding-top:16px; border-top:1px solid var(--tile-edge); }
+.rules h2{ font-size:19px; margin:0 0 4px; }
+.rules h3{ font-size:15px; margin:14px 0 4px; color:var(--accent); }
+.rules ul{ margin:0; padding-left:20px; }
+.rules li{ margin:4px 0; }
+.rules .rfoot{ margin:14px 0 0; font-weight:600; color:var(--text); }
 .qbox{
   margin:4px 0 18px; padding:18px; border-radius:12px; border:2px solid var(--accent);
   font-size:22px; font-weight:600; line-height:1.35;
@@ -189,6 +197,7 @@ input{
       <div class="corners" id="corners" hidden></div>
       <div class="err" id="pickErr" role="alert"></div>
       <div class="count" id="joinedCount"></div>
+      <section class="rules" id="rules" aria-labelledby="rulesName" hidden></section>
       <div class="foot"><button class="link" id="leaveBtn" type="button">Not you? Leave</button></div>
     </div>
 
@@ -198,7 +207,6 @@ input{
       <button class="btn primary" id="againBtn" type="button">Join another game</button>
     </div>
 
-    <div class="foot" id="hostLinkWrap">Teacher? <button class="link" id="hostLink" type="button">Start a session</button></div>
   </div>
 </main>
 
@@ -297,7 +305,6 @@ function showStudent(which){
   $("#joinForm").hidden = which !== "form";
   $("#joined").hidden = which !== "joined";
   $("#ended").hidden = which !== "ended";
-  $("#hostLinkWrap").hidden = which === "joined";
 }
 
 $("#codeInput").addEventListener("input", e => {
@@ -347,8 +354,42 @@ function watchMySpot(code, uid, name){
   }, err => endStudent("Lost connection", explain(err)));
 }
 
+// Rules come from the teacher's game. Only <b> is kept; everything else is plain text.
+function richText(el, html){
+  String(html).split(/(<b>[\s\S]*?<\/b>)/).forEach(part => {
+    const bold = /^<b>/.test(part);
+    const t = document.createElement("textarea");
+    t.innerHTML = (bold ? part.slice(3, -4) : part).replace(/<[^>]*>/g, "");
+    const text = t.value;
+    if(!text) return;
+    if(bold){ const b = document.createElement("b"); b.textContent = text; el.appendChild(b); }
+    else el.appendChild(document.createTextNode(text));
+  });
+}
+let rulesShown = "";
+function renderRules(gm){
+  const box = $("#rules");
+  const r = gm && gm.phase === "lobby" && gm.rules;
+  if(!r || !Array.isArray(r.sections)){ box.hidden = true; rulesShown = ""; return; }
+  const key = JSON.stringify(r);
+  box.hidden = false;
+  if(key === rulesShown) return;
+  rulesShown = key; box.replaceChildren();
+  const h = document.createElement("h2"); h.id = "rulesName"; h.textContent = "How to play " + (r.name || "the game");
+  box.appendChild(h);
+  r.sections.forEach(sec => {
+    if(!sec || !Array.isArray(sec.items) || !sec.items.length) return;
+    const h3 = document.createElement("h3"); h3.textContent = sec.h || "";
+    const ul = document.createElement("ul");
+    sec.items.forEach(it => { const li = document.createElement("li"); richText(li, it); ul.appendChild(li); });
+    box.append(h3, ul);
+  });
+  if(r.foot){ const f = document.createElement("p"); f.className = "rfoot"; f.textContent = r.foot; box.appendChild(f); }
+}
+
 function renderPlay(g, uid, first){
   const gm = g.game, me = gm && gm.players ? gm.players[uid] : null;
+  renderRules(gm);
   $("#corners").hidden = true;
   if(gm && me && gm.type === "fc"){ renderCorners(g, gm, me, uid, first); return; }
   let mark = "in", icon = CHECK_SVG, title, msg, question = null;
@@ -435,9 +476,17 @@ function renderCorners(g, gm, me, uid, first){
     if(quiz || shown !== null) grid = "show";
   }
   else if(gm.phase === "called" && call){
-    setStatus("in", CHECK_SVG, "You’re safe!",
-      (call.quiz ? "The answer was " : (seatedPlay ? "Number " : "Corner ")) + (call.c + 1) + (call.quiz ? "." : " was called.") + " " + gm.alive + " still in.", quiz ? gm.q.q : null);
-    if(quiz) grid = "show";
+    const said = (call.quiz ? "The answer was " : (seatedPlay ? "Number " : "Corner ")) + (call.c + 1) + (call.quiz ? "." : " was called.");
+    // Picked it (or missed the question) but still in: everyone left did the same, so nobody's out.
+    const spared = gm.locked && (shown === null || (call.quiz ? shown !== call.c : shown === call.c));
+    if(spared){
+      const why = shown === null ? "You didn’t pick in time" : call.quiz ? "You picked " + (shown + 1) + ", which isn’t right" : "You picked " + (shown + 1);
+      setStatus("boom", "!", call.quiz ? "Not quite" : "Close call!",
+        said + " " + why + ", but " + (call.quiz ? "everyone still in missed it" : "so did everyone else still in") + ", so nobody’s out this round.", quiz ? gm.q.q : null);
+    } else {
+      setStatus("in", CHECK_SVG, call.quiz ? "Correct!" : "You’re safe!", said + " " + gm.alive + " still in.", quiz ? gm.q.q : null);
+    }
+    if(quiz || shown !== null) grid = "show";
   }
   else if(gm.phase === "ended") setStatus("in", CHECK_SVG, "You made it to the end!", "Game " + gm.game + " is over.");
   else setStatus("in", CHECK_SVG, "You’re still in", "");
@@ -452,7 +501,8 @@ function renderCorners(g, gm, me, uid, first){
     const label = quiz ? gm.q.a[c] : (!seatedPlay && gm.names && gm.names[c]) || "";
     if(quiz && !label) continue;
     const b = document.createElement("button");
-    b.type = "button"; b.className = "corner" + (shown === c ? " on" : "") + (call && call.quiz && call.c === c ? " right" : "");
+    b.type = "button"; b.className = "corner" + (shown === c ? " on" : "") + (call && call.quiz && call.c === c ? " right" : "") +
+      (call && call.quiz && shown === c && c !== call.c ? " miss" : "");
     b.dataset.c = c; b.disabled = grid !== "pick";
     b.setAttribute("aria-pressed", String(shown === c));
     const n = document.createElement("span"); n.className = "cn"; n.textContent = c + 1;
@@ -492,7 +542,6 @@ $("#againBtn").addEventListener("click", () => { $("#codeInput").value = ""; sho
 /* ======================= HOST ======================= */
 let hostUnsub = null, hostCode = null, hostOpen = true, seen = new Set();
 
-$("#hostLink").addEventListener("click", startHost);
 
 async function startHost(){
   try{
