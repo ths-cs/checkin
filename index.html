@@ -447,15 +447,62 @@ function setStatus(mark, icon, title, msg, question){
   const q = $("#qbox"); q.hidden = !question; q.textContent = question || "";
 }
 
+let prevFc = "", backKey = "";
 function renderCorners(g, gm, me, uid, first){
-  const seatedPlay = gm.play === "seated", word = seatedPlay ? "number" : "corner";
+  const seatedPlay = gm.play !== "walk", word = seatedPlay ? "number" : "corner";
+  const scoring = gm.scoring || "out", roundKey = gm.game + ":" + gm.round;
+  if(prevFc === "out" && me.s === "in") backKey = roundKey;   // stays true for the rest of this round
+  const backIn = backKey === roundKey && me.s === "in";
+  prevFc = me.s;
   const p = g.picks && g.picks[uid];
   const myPick = p && p.g === gm.game && p.r === gm.round ? p.c : null;
   const shown = typeof me.p === "number" ? me.p : myPick;
   const quiz = !!gm.q, call = gm.call;
   let grid = null; // "pick" | "show"
 
-  if(me.s === "won") setStatus("won", "🏆", "You won, " + first + "!", "Last one still in for game " + gm.game + ".");
+  const ptsLine = n => n + (n === 1 ? " point" : " points");
+  const place = r => r + (["th","st","nd","rd"][(r % 100 - 20) % 10] || ["th","st","nd","rd"][r % 100] || "th");
+  if(scoring === "points"){
+    const pts = me.pts || 0;
+    if(gm.phase === "ended") setStatus(me.s === "won" ? "won" : "in", me.s === "won" ? "🏆" : CHECK_SVG,
+      me.s === "won" ? "You won, " + first + "!" : "Game over",
+      "You finished with " + ptsLine(pts) + (pts ? ", " + place(me.rank) + " place." : "."));
+    else if(gm.phase === "lobby") setStatus("in", CHECK_SVG, "You’re playing, " + first + "!", "Nobody’s out in this game. Every right answer scores a point.");
+    else if(gm.phase === "moving" || gm.phase === "paused"){
+      grid = gm.picking ? "pick" : quiz ? "show" : null;
+      setStatus("ask", "?", gm.picking ? (shown === null ? "Pick your answer" : "You picked " + (shown + 1)) : "Go to the corner with your answer",
+        gm.picking ? "You can change it until the bell." : "Pick one and stay there.", quiz ? gm.q.q : null);
+    }
+    else if(gm.phase === "frozen" || gm.phase === "rolling"){
+      setStatus("boom", "✋", seatedPlay ? "Hands up!" : "Freeze!", shown !== null ? "You picked " + (shown + 1) + ". No changing now." : gm.locked ? "You didn’t pick in time." : "Here comes the answer.", quiz ? gm.q.q : null);
+      if(quiz) grid = "show";
+    }
+    else if(gm.phase === "called" && call){
+      if(me.got) setStatus("won", "+1", "Correct!", "You scored a point.", quiz ? gm.q.q : null);
+      else setStatus("out", "✕", shown === null && gm.locked ? "No pick in time" : "Not quite",
+        "The answer was " + (call.c + 1) + ". No point this round.", quiz ? gm.q.q : null);
+      if(quiz) grid = "show";
+    }
+    else setStatus("in", CHECK_SVG, "Next question soon", "Get ready.");
+    $("#joinedCount").textContent = "Game " + gm.game + (gm.round ? ", question " + gm.round : "") + ": you have " + ptsLine(pts) + (pts ? " (" + place(me.rank) + ")" : "");
+  }
+  else if(me.s === "out" && scoring === "comeback" && gm.phase !== "ended"){
+    if((gm.phase === "moving" || gm.phase === "paused") && gm.picking){
+      grid = "pick";
+      setStatus("ask", "?", "Answer to get back in!", shown === null ? "You’re out, but a right answer brings you back." : "You picked " + (shown + 1) + ". You can change it until the bell.", quiz ? gm.q.q : null);
+    } else if(gm.phase === "frozen" || gm.phase === "rolling"){
+      setStatus("boom", "✋", "Hands up!", shown !== null ? "You picked " + (shown + 1) + ". Fingers crossed." : "Here comes the answer.", quiz ? gm.q.q : null);
+      if(quiz) grid = "show";
+    } else if(gm.phase === "called" && call){
+      setStatus("out", "✕", "Not this time", "The answer was " + (call.c + 1) + ". Keep answering. The next one could bring you back.", quiz ? gm.q.q : null);
+      if(quiz) grid = "show";
+    } else setStatus("out", "✕", "You’re out for now", "Keep answering. A right answer brings you back in.", quiz ? gm.q.q : null);
+  }
+  else if(backIn && gm.phase === "called" && call) {
+    setStatus("won", "↩", "You’re back in!", "You got it right. The answer was " + (call.c + 1) + ".", quiz ? gm.q.q : null);
+    if(quiz) grid = "show";
+  }
+  else if(me.s === "won") setStatus("won", "🏆", "You won, " + first + "!", "Last one still in for game " + gm.game + ".");
   else if(me.s === "out") setStatus("out", "✕", "You’re out", "Out in round " + me.r + ". Stay put and keep playing along in your head.", quiz ? gm.q.q : null);
   else if(gm.phase === "lobby") setStatus("in", CHECK_SVG, "You’re playing, " + first + "!",
     seatedPlay ? "Stay in your seat. You’ll pick a number on this screen." : "Get ready to walk to a corner.");
@@ -491,7 +538,7 @@ function renderCorners(g, gm, me, uid, first){
   else if(gm.phase === "ended") setStatus("in", CHECK_SVG, "You made it to the end!", "Game " + gm.game + " is over.");
   else setStatus("in", CHECK_SVG, "You’re still in", "");
 
-  $("#joinedCount").textContent = "Game " + gm.game + (gm.round ? ", round " + gm.round : "") + ": " + gm.alive + " of " + gm.seated + " still in";
+  if(scoring !== "points") $("#joinedCount").textContent = "Game " + gm.game + (gm.round ? ", round " + gm.round : "") + ": " + gm.alive + " of " + gm.seated + " still in";
 
   if(grid !== "pick") $("#pickErr").textContent = "";
   const box = $("#corners");
