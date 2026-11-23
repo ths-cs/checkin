@@ -80,7 +80,36 @@ input{
 
 .done-mark{
   width:64px; height:64px; border-radius:50%; background:var(--live); color:#fff;
-  display:grid; place-items:center; margin:18px 0 0;
+  display:grid; place-items:center; margin:18px 0 0; font-size:30px; font-weight:700; line-height:1;
+}
+.done-mark[data-s="out"]{ background:var(--muted); }
+.done-mark[data-s="boom"]{ background:#E0761F; }
+.done-mark[data-s="ask"]{ background:var(--accent); }
+.done-mark[data-s="won"]{ background:#D9A400; }
+.done-mark[data-s="wait"]{ background:var(--border); }
+.corners{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:0 0 18px; }
+.corner{
+  --cc:#2F6FD6; display:flex; flex-direction:column; align-items:flex-start; gap:4px; min-height:96px;
+  padding:12px 14px; border-radius:12px; border:3px solid var(--cc); background:transparent; color:var(--text);
+  font:inherit; text-align:left; cursor:pointer;
+}
+.corner .cn{ font-family:var(--mono); font-size:34px; font-weight:600; line-height:1; color:var(--cc); }
+.corner .ca{ font-size:16px; font-weight:500; overflow-wrap:anywhere; }
+.corner[data-c="1"]{ --cc:#C08A1E; } .corner[data-c="2"]{ --cc:#2E8B57; } .corner[data-c="3"]{ --cc:#7B4FC9; }
+.corner.on{ background:var(--cc); color:#fff; }
+.corner.on .cn{ color:#fff; }
+.corner:disabled{ cursor:default; }
+.corner:disabled:not(.on){ opacity:.55; }
+.corner.right{ outline:4px solid var(--live); outline-offset:2px; }
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]) .corner[data-c="0"]{ --cc:#5B8FE8; }
+  :root:not([data-theme="light"]) .corner[data-c="1"]{ --cc:#E5B65A; }
+  :root:not([data-theme="light"]) .corner[data-c="2"]{ --cc:#4CC47E; }
+  :root:not([data-theme="light"]) .corner[data-c="3"]{ --cc:#9D7BE0; }
+}
+.qbox{
+  margin:4px 0 18px; padding:18px; border-radius:12px; border:2px solid var(--accent);
+  font-size:22px; font-weight:600; line-height:1.35;
 }
 .count{ font-family:var(--mono); color:var(--muted); font-size:14px; }
 
@@ -151,11 +180,14 @@ input{
     </form>
 
     <div id="joined" hidden>
-      <div class="done-mark" aria-hidden="true">
-        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+      <div class="done-mark" id="mark" aria-hidden="true"></div>
+      <div aria-live="polite">
+        <h1 id="joinedTitle">You’re in</h1>
+        <p id="joinedMsg">Keep this screen open. Your teacher will start soon.</p>
+        <div class="qbox" id="qbox" hidden></div>
       </div>
-      <h1 id="joinedTitle">You’re in</h1>
-      <p>Keep this screen open. Your teacher will start soon.</p>
+      <div class="corners" id="corners" hidden></div>
+      <div class="err" id="pickErr" role="alert"></div>
       <div class="count" id="joinedCount"></div>
       <div class="foot"><button class="link" id="leaveBtn" type="button">Not you? Leave</button></div>
     </div>
@@ -297,18 +329,147 @@ $("#joinForm").addEventListener("submit", async e => {
   }
 });
 
+const CHECK_SVG = '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+function ordinal(n){ const s = ["th","st","nd","rd"], v = n % 100; return n + (s[(v-20)%10] || s[v] || s[0]); }
+let wasAsked = false;
+
+let curCode = null;
 function watchMySpot(code, uid, name){
   if(studentUnsub) studentUnsub();
-  $("#joinedTitle").textContent = "You’re in, " + name.split(" ")[0] + ".";
+  curCode = code;
   showStudent("joined");
   studentUnsub = onValue(ref(db, "games/" + code), snap => {
     const g = snap.val();
     if(!g){ endStudent("Session ended", "Your teacher ended this session."); return; }
     const players = g.players || {};
     if(!players[uid]){ endStudent("You were removed", "Ask your teacher, then join again."); return; }
-    const n = Object.keys(players).length;
-    $("#joinedCount").textContent = n === 1 ? "You’re the first one here" : n + " people checked in";
+    renderPlay(g, uid, name.split(" ")[0]);
   }, err => endStudent("Lost connection", explain(err)));
+}
+
+function renderPlay(g, uid, first){
+  const gm = g.game, me = gm && gm.players ? gm.players[uid] : null;
+  $("#corners").hidden = true;
+  if(gm && me && gm.type === "fc"){ renderCorners(g, gm, me, uid, first); return; }
+  let mark = "in", icon = CHECK_SVG, title, msg, question = null;
+  const tally = gm ? gm.alive + " of " + gm.seated + " still in" : "";
+
+  if(!gm || !me){
+    const checked = Object.keys(g.players || {}).length;
+    title = "You’re in, " + first + ".";
+    msg = gm && gm.phase !== "lobby" ? "This round already started. You’ll play in the next one."
+        : gm ? "Your teacher is seating everyone. Keep this screen open."
+        : "Keep this screen open. Your teacher will start soon.";
+    if(gm){ mark = "wait"; icon = "…"; }
+    $("#joinedCount").textContent = checked === 1 ? "You’re the first one here" : checked + " people checked in";
+  } else if(me.s === "won"){
+    mark = "won"; icon = "🏆"; title = "You won, " + first + "!";
+    msg = "Last one standing in round " + gm.round + ".";
+  } else if(me.s === "out"){
+    mark = "out"; icon = "✕"; title = "You’re out";
+    msg = (me.place ? "You finished " + ordinal(me.place) + ". " : "") + "Stay in your seat and cheer.";
+  } else if(gm.phase === "question" && gm.holder === uid){
+    mark = "ask"; icon = "?"; title = "Your question";
+    question = gm.question || "Your teacher will ask you a question.";
+    msg = "Answer out loud.";
+  } else {
+    title = {
+      lobby: "You’re playing, " + first + "!",
+      ready: "You’re still in", burning: "You’re still in", paused: "Paused. Freeze!",
+      boom: "Boom! Freeze!", question: "Question time", ended: "You made it to the end!"
+    }[gm.phase] || "You’re still in";
+    msg = {
+      lobby: "Round " + gm.round + " is about to start. Get ready to catch.",
+      ready: "The next fuse lights soon.", burning: "Keep passing!", paused: "Hold still until the game starts again.",
+      boom: "Your teacher is checking who has the ball.", question: "Someone is answering. Stay frozen.",
+      ended: "Round " + gm.round + " is over."
+    }[gm.phase] || "";
+    if(gm.phase === "boom"){ mark = "boom"; icon = "💥"; }
+  }
+
+  const m = $("#mark"); m.dataset.s = mark;
+  if(icon === CHECK_SVG) m.innerHTML = CHECK_SVG; else m.textContent = icon;
+  $("#joinedTitle").textContent = title;
+  $("#joinedMsg").textContent = msg;
+  const q = $("#qbox"); q.hidden = !question; q.textContent = question || "";
+  if(gm && me) $("#joinedCount").textContent = "Round " + gm.round + ": " + tally;
+  if(question && !wasAsked && navigator.vibrate) navigator.vibrate(250);
+  wasAsked = !!question;
+}
+
+/* ---------- Four Corners ---------- */
+function setStatus(mark, icon, title, msg, question){
+  const m = $("#mark"); m.dataset.s = mark;
+  if(icon === CHECK_SVG) m.innerHTML = CHECK_SVG; else m.textContent = icon;
+  $("#joinedTitle").textContent = title;
+  $("#joinedMsg").textContent = msg;
+  const q = $("#qbox"); q.hidden = !question; q.textContent = question || "";
+}
+
+function renderCorners(g, gm, me, uid, first){
+  const seatedPlay = gm.play === "seated", word = seatedPlay ? "number" : "corner";
+  const p = g.picks && g.picks[uid];
+  const myPick = p && p.g === gm.game && p.r === gm.round ? p.c : null;
+  const shown = typeof me.p === "number" ? me.p : myPick;
+  const quiz = !!gm.q, call = gm.call;
+  let grid = null; // "pick" | "show"
+
+  if(me.s === "won") setStatus("won", "🏆", "You won, " + first + "!", "Last one still in for game " + gm.game + ".");
+  else if(me.s === "out") setStatus("out", "✕", "You’re out", "Out in round " + me.r + ". Stay put and keep playing along in your head.", quiz ? gm.q.q : null);
+  else if(gm.phase === "lobby") setStatus("in", CHECK_SVG, "You’re playing, " + first + "!",
+    seatedPlay ? "Stay in your seat. You’ll pick a number on this screen." : "Get ready to walk to a corner.");
+  else if(gm.phase === "ready") setStatus("in", CHECK_SVG, "You’re still in", "Round " + (gm.round + 1) + " starts soon. " + gm.alive + " of " + gm.seated + " still in.");
+  else if(gm.phase === "moving" || gm.phase === "paused"){
+    if(gm.picking){
+      grid = "pick";
+      setStatus("ask", "?", shown === null ? (quiz ? "Pick your answer" : "Pick a number") : "You picked " + (shown + 1),
+        gm.phase === "paused" ? "Paused. You can still change your pick." : "Tap a " + word + ". You can change it until the bell.", quiz ? gm.q.q : null);
+    } else {
+      if(quiz) grid = "show";
+      setStatus("ask", "?", quiz ? "Go to the corner with your answer" : "Walk to a corner!", "Pick one and stay there.", quiz ? gm.q.q : null);
+    }
+  }
+  else if(gm.phase === "frozen" || gm.phase === "rolling"){
+    setStatus("boom", "✋", seatedPlay ? "Hands up!" : "Freeze!",
+      shown !== null ? "You picked " + (shown + 1) + ". No changing now." : gm.locked ? "You didn’t pick in time." : "No switching now.", quiz ? gm.q.q : null);
+    if(quiz || shown !== null) grid = "show";
+  }
+  else if(gm.phase === "called" && call){
+    setStatus("in", CHECK_SVG, "You’re safe!",
+      (call.quiz ? "The answer was " : (seatedPlay ? "Number " : "Corner ")) + (call.c + 1) + (call.quiz ? "." : " was called.") + " " + gm.alive + " still in.", quiz ? gm.q.q : null);
+    if(quiz) grid = "show";
+  }
+  else if(gm.phase === "ended") setStatus("in", CHECK_SVG, "You made it to the end!", "Game " + gm.game + " is over.");
+  else setStatus("in", CHECK_SVG, "You’re still in", "");
+
+  $("#joinedCount").textContent = "Game " + gm.game + (gm.round ? ", round " + gm.round : "") + ": " + gm.alive + " of " + gm.seated + " still in";
+
+  if(grid !== "pick") $("#pickErr").textContent = "";
+  const box = $("#corners");
+  if(!grid){ box.hidden = true; return; }
+  box.hidden = false; box.replaceChildren();
+  for(let c = 0; c < 4; c++){
+    const label = quiz ? gm.q.a[c] : (!seatedPlay && gm.names && gm.names[c]) || "";
+    if(quiz && !label) continue;
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "corner" + (shown === c ? " on" : "") + (call && call.quiz && call.c === c ? " right" : "");
+    b.dataset.c = c; b.disabled = grid !== "pick";
+    b.setAttribute("aria-pressed", String(shown === c));
+    const n = document.createElement("span"); n.className = "cn"; n.textContent = c + 1;
+    b.appendChild(n);
+    if(label){ const a = document.createElement("span"); a.className = "ca"; a.textContent = label; b.appendChild(a); }
+    if(grid === "pick") b.addEventListener("click", () => sendPick(gm, uid, c));
+    box.appendChild(b);
+  }
+}
+
+async function sendPick(gm, uid, c){
+  const err = $("#pickErr"); err.textContent = "";
+  try{
+    await set(ref(db, `games/${curCode}/picks/${uid}`), { g: gm.game, r: gm.round, c });
+  }catch(e){
+    err.textContent = "Your pick didn’t save. Tell your teacher, and show your number with your fingers for now.";
+  }
 }
 
 function endStudent(title, msg){
