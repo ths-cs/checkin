@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>306 Check-In</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Google+Sans+Flex:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+:root{
+  --panel:#F2F2F2; --border:#B5B5B5; --text:#161616; --muted:#5C5C5C;
+  --tile:#FFFFFF; --tile-edge:#C4C4C4; --field-bg:#FFFFFF;
+  --accent:#9E1B32; --accent-dark:#7A1527; --on-accent:#FFFFFF;
+  --live:#2E8B57; --danger-text:#9E1B32;
+  --sans:'Google Sans Flex', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --mono:'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  color-scheme: light;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --panel:#1E1E1E; --border:#5A5A5A; --text:#EDEDED; --muted:#A8A8A8;
+    --tile:#2B2B2B; --tile-edge:#454545; --field-bg:#161616;
+    --accent:#C4304C; --accent-dark:#9E1B32;
+    --live:#4CC47E; --danger-text:#F2B8C2;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"]{
+  --panel:#1E1E1E; --border:#5A5A5A; --text:#EDEDED; --muted:#A8A8A8;
+  --tile:#2B2B2B; --tile-edge:#454545; --field-bg:#161616;
+  --accent:#C4304C; --accent-dark:#9E1B32;
+  --live:#4CC47E; --danger-text:#F2B8C2;
+  color-scheme: dark;
+}
+*,*::before,*::after{ box-sizing:border-box; }
+html{ height:100%; scroll-padding-top:env(safe-area-inset-top,0px); }
+body{ margin:0; min-height:100%; background:var(--panel); color:var(--text); font-family:var(--sans); line-height:1.4; }
+button,input{ font:inherit; }
+:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+[hidden]{ display:none !important; }
+
+.brand{ display:flex; align-items:center; gap:10px; font-weight:600; }
+.brand-mark{
+  width:34px; height:34px; border-radius:50%; border:2px solid var(--accent);
+  display:inline-grid; place-items:center; color:var(--accent);
+  font-family:var(--mono); font-size:13px; font-weight:600;
+}
+
+/* ---------- Student ---------- */
+.student{ min-height:100vh; display:grid; place-items:center; padding:24px 16px; }
+.card{
+  width:100%; max-width:400px; background:var(--tile); border:1px solid var(--tile-edge);
+  border-radius:14px; padding:28px 24px;
+}
+.card h1{ font-size:26px; margin:20px 0 4px; font-weight:700; }
+.card p{ margin:0 0 20px; color:var(--muted); }
+label{ display:block; font-weight:600; margin:16px 0 6px; }
+.hint{ font-weight:400; color:var(--muted); font-size:14px; }
+input{
+  width:100%; padding:12px 14px; border:1px solid var(--border); border-radius:10px;
+  background:var(--field-bg); color:var(--text); font-size:18px;
+}
+#codeInput{ font-family:var(--mono); font-size:26px; letter-spacing:.3em; text-transform:uppercase; text-align:center; }
+.btn{
+  display:inline-flex; justify-content:center; align-items:center; gap:8px;
+  padding:12px 18px; border-radius:10px; border:1px solid var(--border);
+  background:transparent; color:var(--text); cursor:pointer; font-weight:600;
+}
+.btn.primary{ background:var(--accent); border-color:var(--accent); color:var(--on-accent); width:100%; margin-top:22px; font-size:18px; }
+.btn.primary:hover{ background:var(--accent-dark); }
+.btn:disabled{ opacity:.6; cursor:progress; }
+.err{ color:var(--danger-text); margin-top:14px; min-height:1.4em; font-weight:500; }
+.foot{ margin-top:22px; text-align:center; font-size:14px; color:var(--muted); }
+.link{ background:none; border:0; color:var(--accent); text-decoration:underline; cursor:pointer; padding:0; }
+
+.done-mark{
+  width:64px; height:64px; border-radius:50%; background:var(--live); color:#fff;
+  display:grid; place-items:center; margin:18px 0 0;
+}
+.count{ font-family:var(--mono); color:var(--muted); font-size:14px; }
+
+/* ---------- Host ---------- */
+.host{ min-height:100vh; display:flex; flex-direction:column; }
+.bar{
+  display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+  padding:12px 20px; border-bottom:1px solid var(--border);
+}
+.bar .spacer{ flex:1; }
+.status{ display:inline-flex; align-items:center; gap:6px; font-size:14px; color:var(--muted); margin-right:6px; }
+.dot{ width:9px; height:9px; border-radius:50%; background:var(--live); }
+.dot.paused{ background:var(--muted); }
+.host-main{ flex:1; display:grid; grid-template-columns:minmax(0,1fr); gap:24px; padding:24px 20px; }
+@media (min-width:900px){ .host-main{ grid-template-columns:minmax(340px,5fr) 7fr; padding:32px; gap:40px; } }
+
+.joinpanel{ display:flex; flex-direction:column; align-items:flex-start; gap:18px; }
+.joinpanel .label{ color:var(--muted); font-size:16px; margin:0; }
+.url{ font-size:clamp(18px,2.2vw,26px); font-weight:600; margin:0; overflow-wrap:anywhere; }
+.code{ display:flex; gap:10px; }
+.code span{
+  width:clamp(58px,7vw,96px); aspect-ratio:3/4; display:grid; place-items:center;
+  background:var(--tile); border:2px solid var(--tile-edge); border-bottom-width:5px; border-radius:12px;
+  font-family:var(--mono); font-weight:600; font-size:clamp(40px,5.5vw,72px); color:var(--accent);
+}
+#qr{ background:#fff; padding:10px; border-radius:10px; line-height:0; }
+#qr img,#qr canvas{ width:170px; height:170px; }
+
+.roster h2{ font-size:22px; margin:0 0 14px; display:flex; align-items:baseline; gap:10px; }
+.roster h2 .num{ font-family:var(--mono); color:var(--accent); font-size:30px; }
+.names{ list-style:none; margin:0; padding:0; display:grid; grid-template-columns:repeat(auto-fill,minmax(170px,1fr)); gap:8px; }
+.names li{
+  display:flex; align-items:center; justify-content:space-between; gap:6px;
+  background:var(--tile); border:1px solid var(--tile-edge); border-radius:10px;
+  padding:10px 8px 10px 14px; font-size:18px; font-weight:500;
+}
+.names li.new{ animation:pop .5s ease-out; }
+@keyframes pop{ from{ background:var(--live); color:#fff; } }
+@media (prefers-reduced-motion: reduce){ .names li.new{ animation:none; } }
+.x{
+  border:0; background:none; color:var(--muted); cursor:pointer; width:30px; height:30px;
+  border-radius:8px; font-size:20px; line-height:1;
+}
+.x:hover{ background:var(--panel); color:var(--danger-text); }
+.empty{ color:var(--muted); border:2px dashed var(--border); border-radius:12px; padding:28px; text-align:center; }
+
+.banner{ margin:0; padding:12px 20px; background:var(--accent); color:#fff; font-weight:500; }
+</style>
+</head>
+<body>
+
+<p class="banner" id="setupErr" hidden></p>
+
+<!-- ===== Student ===== -->
+<main class="student" id="studentView">
+  <div class="card">
+    <div class="brand"><span class="brand-mark">306</span>Room 306</div>
+
+    <form id="joinForm" novalidate>
+      <h1>Join the game</h1>
+      <p>Type the code on the board.</p>
+      <label for="codeInput">Game code</label>
+      <input id="codeInput" maxlength="4" autocomplete="off" autocapitalize="characters" spellcheck="false" inputmode="text" required>
+      <label for="nameInput">Your name <span class="hint">first name and last initial</span></label>
+      <input id="nameInput" maxlength="24" autocomplete="off" required>
+      <button class="btn primary" id="joinBtn" type="submit">Join</button>
+      <div class="err" id="joinErr" role="alert"></div>
+    </form>
+
+    <div id="joined" hidden>
+      <div class="done-mark" aria-hidden="true">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+      </div>
+      <h1 id="joinedTitle">You’re in</h1>
+      <p>Keep this screen open. Your teacher will start soon.</p>
+      <div class="count" id="joinedCount"></div>
+      <div class="foot"><button class="link" id="leaveBtn" type="button">Not you? Leave</button></div>
+    </div>
+
+    <div id="ended" hidden>
+      <h1 id="endedTitle">Session ended</h1>
+      <p id="endedMsg">Your teacher ended this session.</p>
+      <button class="btn primary" id="againBtn" type="button">Join another game</button>
+    </div>
+
+    <div class="foot" id="hostLinkWrap">Teacher? <button class="link" id="hostLink" type="button">Start a session</button></div>
+  </div>
+</main>
+
+<!-- ===== Host ===== -->
+<div class="host" id="hostView" hidden>
+  <header class="bar">
+    <div class="brand"><span class="brand-mark">306</span>Check-In</div>
+    <div class="spacer"></div>
+    <span class="status"><span class="dot" id="statusDot"></span><span id="statusText">Joining open</span></span>
+    <button class="btn" id="pauseBtn" type="button">Pause joining</button>
+    <button class="btn" id="endBtn" type="button">End session</button>
+  </header>
+  <main class="host-main">
+    <section class="joinpanel" aria-label="How to join">
+      <p class="label">Go to</p>
+      <p class="url" id="hostUrl"></p>
+      <p class="label">and enter</p>
+      <div class="code" id="hostCode" aria-live="polite"></div>
+      <div id="qr" aria-label="QR code that opens the join page"></div>
+    </section>
+    <section class="roster" aria-live="polite">
+      <h2><span class="num" id="hostCount">0</span><span id="hostCountLabel">checked in</span></h2>
+      <div class="empty" id="hostEmpty">Names appear here as students join.</div>
+      <ul class="names" id="hostNames"></ul>
+    </section>
+  </main>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getDatabase, ref, get, set, update, remove, onValue, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCiD9r0XCHggdxqvhXHgxUSrJiIWTMLc00",
+  authDomain: "room306games.firebaseapp.com",
+  databaseURL: "https://room306games-default-rtdb.firebaseio.com",
+  projectId: "room306games",
+  storageBucket: "room306games.firebasestorage.app",
+  messagingSenderId: "511693713114",
+  appId: "1:511693713114:web:1f5c08bafd43d038fd3fe3"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getDatabase(app);
+
+const $ = s => document.querySelector(s);
+const LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ"; // no I or O, so codes read cleanly
+const JOIN_URL = location.origin + location.pathname;
+const store = {
+  get(k){ try{ return JSON.parse(localStorage.getItem(k)); }catch(e){ return null; } },
+  set(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} },
+  del(k){ try{ localStorage.removeItem(k); }catch(e){} }
+};
+
+/* ---------- Sign-in ---------- */
+let uidPromise = null;
+function signIn(){
+  if(!uidPromise){
+    uidPromise = new Promise((resolve, reject) => {
+      const stop = onAuthStateChanged(auth, user => {
+        if(user){ stop(); resolve(user.uid); }
+      });
+      signInAnonymously(auth).catch(err => { stop(); uidPromise = null; reject(err); });
+    });
+  }
+  return uidPromise;
+}
+function explain(err){
+  const c = (err && err.code) || "";
+  if(c.includes("operation-not-allowed") || c.includes("admin-restricted"))
+    return "Anonymous sign-in is turned off. In Firebase, enable it under Authentication → Sign-in method.";
+  if(c.includes("unauthorized-domain"))
+    return "This website isn’t on Firebase’s allowed list. Add " + location.hostname + " under Authentication → Settings → Authorized domains.";
+  if(c.includes("network"))
+    return "Can’t reach Firebase. Check the internet connection and try again.";
+  if(String(err && err.message).toLowerCase().includes("permission"))
+    return "Firebase refused the request. Check that the database rules were published.";
+  return "Something went wrong: " + (err && (err.code || err.message) || "unknown error");
+}
+function showSetupError(err){
+  const b = $("#setupErr"); b.textContent = explain(err); b.hidden = false;
+}
+if(location.protocol === "file:"){
+  const b = $("#setupErr");
+  b.textContent = "Open this page from a website (like GitHub Pages), not as a file on your computer. Firebase sign-in doesn’t work from file://.";
+  b.hidden = false;
+}
+
+/* ======================= STUDENT ======================= */
+let studentUnsub = null;
+
+function showStudent(which){
+  $("#studentView").hidden = false; $("#hostView").hidden = true;
+  $("#joinForm").hidden = which !== "form";
+  $("#joined").hidden = which !== "joined";
+  $("#ended").hidden = which !== "ended";
+  $("#hostLinkWrap").hidden = which === "joined";
+}
+
+$("#codeInput").addEventListener("input", e => {
+  e.target.value = e.target.value.toUpperCase().replace(/[^A-Z]/g, "").slice(0,4);
+});
+
+$("#joinForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const code = $("#codeInput").value.trim();
+  const name = $("#nameInput").value.replace(/\s+/g, " ").trim();
+  const errEl = $("#joinErr");
+  errEl.textContent = "";
+  if(code.length !== 4){ errEl.textContent = "The code has 4 letters."; $("#codeInput").focus(); return; }
+  if(!name){ errEl.textContent = "Type your name so your teacher knows who’s here."; $("#nameInput").focus(); return; }
+
+  const btn = $("#joinBtn"); btn.disabled = true; btn.textContent = "Joining…";
+  try{
+    const uid = await signIn();
+    const game = await get(ref(db, "games/" + code));
+    if(!game.exists()){ errEl.textContent = "No game with code " + code + ". Check the board and try again."; return; }
+    if(game.val().open !== true){ errEl.textContent = "Joining is paused. Wait for your teacher, then tap Join again."; return; }
+    await set(ref(db, `games/${code}/players/${uid}`), { name, joinedAt: serverTimestamp() });
+    store.set("306student", { code, name });
+    watchMySpot(code, uid, name);
+  }catch(err){
+    errEl.textContent = explain(err);
+  }finally{
+    btn.disabled = false; btn.textContent = "Join";
+  }
+});
+
+function watchMySpot(code, uid, name){
+  if(studentUnsub) studentUnsub();
+  $("#joinedTitle").textContent = "You’re in, " + name.split(" ")[0] + ".";
+  showStudent("joined");
+  studentUnsub = onValue(ref(db, "games/" + code), snap => {
+    const g = snap.val();
+    if(!g){ endStudent("Session ended", "Your teacher ended this session."); return; }
+    const players = g.players || {};
+    if(!players[uid]){ endStudent("You were removed", "Ask your teacher, then join again."); return; }
+    const n = Object.keys(players).length;
+    $("#joinedCount").textContent = n === 1 ? "You’re the first one here" : n + " people checked in";
+  }, err => endStudent("Lost connection", explain(err)));
+}
+
+function endStudent(title, msg){
+  if(studentUnsub){ studentUnsub(); studentUnsub = null; }
+  store.del("306student");
+  $("#endedTitle").textContent = title; $("#endedMsg").textContent = msg;
+  showStudent("ended");
+}
+
+$("#leaveBtn").addEventListener("click", async () => {
+  const s = store.get("306student");
+  if(studentUnsub){ studentUnsub(); studentUnsub = null; }
+  store.del("306student");
+  if(s){ try{ const uid = await signIn(); await remove(ref(db, `games/${s.code}/players/${uid}`)); }catch(e){} }
+  $("#nameInput").value = "";
+  showStudent("form"); $("#nameInput").focus();
+});
+$("#againBtn").addEventListener("click", () => { $("#codeInput").value = ""; showStudent("form"); $("#codeInput").focus(); });
+
+/* ======================= HOST ======================= */
+let hostUnsub = null, hostCode = null, hostOpen = true, seen = new Set();
+
+$("#hostLink").addEventListener("click", startHost);
+
+async function startHost(){
+  try{
+    const uid = await signIn();
+    const saved = store.get("306host");
+    if(saved){
+      const snap = await get(ref(db, "games/" + saved));
+      if(snap.exists() && snap.val().hostUid === uid){ openHost(saved); return; }
+    }
+    let code;
+    for(let i = 0; i < 10; i++){
+      code = Array.from(crypto.getRandomValues(new Uint32Array(4)), n => LETTERS[n % LETTERS.length]).join("");
+      if(!(await get(ref(db, "games/" + code))).exists()) break;
+    }
+    await set(ref(db, "games/" + code), { hostUid: uid, open: true, createdAt: serverTimestamp() });
+    store.set("306host", code);
+    openHost(code);
+  }catch(err){
+    showSetupError(err);
+  }
+}
+
+function openHost(code){
+  hostCode = code; seen = new Set();
+  $("#studentView").hidden = true; $("#hostView").hidden = false;
+  $("#hostUrl").textContent = JOIN_URL.replace(/^https?:\/\//, "");
+  const codeEl = $("#hostCode"); codeEl.replaceChildren();
+  codeEl.setAttribute("aria-label", "Game code " + code.split("").join(" "));
+  for(const ch of code){ const s = document.createElement("span"); s.textContent = ch; codeEl.appendChild(s); }
+  const qr = $("#qr"); qr.replaceChildren();
+  if(window.QRCode){ new QRCode(qr, { text: JOIN_URL + "?code=" + code, width: 340, height: 340, correctLevel: QRCode.CorrectLevel.M }); }
+  else qr.hidden = true;
+
+  if(hostUnsub) hostUnsub();
+  let first = true;
+  hostUnsub = onValue(ref(db, "games/" + code), snap => {
+    const g = snap.val();
+    if(!g){ closeHost(); return; }
+    hostOpen = g.open === true;
+    $("#statusDot").classList.toggle("paused", !hostOpen);
+    $("#statusText").textContent = hostOpen ? "Joining open" : "Joining paused";
+    $("#pauseBtn").textContent = hostOpen ? "Pause joining" : "Reopen joining";
+    renderNames(g.players || {}, first);
+    first = false;
+  }, err => showSetupError(err));
+}
+
+function renderNames(players, first){
+  const list = Object.entries(players).sort((a,b) => (a[1].joinedAt||0) - (b[1].joinedAt||0));
+  $("#hostCount").textContent = list.length;
+  $("#hostEmpty").hidden = list.length > 0;
+  const ul = $("#hostNames"); ul.replaceChildren();
+  for(const [uid, p] of list){
+    const li = document.createElement("li");
+    if(!first && !seen.has(uid)) li.className = "new";
+    seen.add(uid);
+    const n = document.createElement("span"); n.textContent = p.name || "Someone";
+    const x = document.createElement("button");
+    x.className = "x"; x.type = "button"; x.textContent = "×";
+    x.setAttribute("aria-label", "Remove " + (p.name || "student"));
+    x.addEventListener("click", () => remove(ref(db, `games/${hostCode}/players/${uid}`)).catch(showSetupError));
+    li.append(n, x); ul.appendChild(li);
+  }
+}
+
+$("#pauseBtn").addEventListener("click", () => {
+  update(ref(db, "games/" + hostCode), { open: !hostOpen }).catch(showSetupError);
+});
+$("#endBtn").addEventListener("click", async () => {
+  if(!confirm("End this session? Everyone will be signed out of it.")) return;
+  try{ await remove(ref(db, "games/" + hostCode)); }catch(err){ showSetupError(err); }
+});
+function closeHost(){
+  if(hostUnsub){ hostUnsub(); hostUnsub = null; }
+  store.del("306host"); hostCode = null;
+  $("#hostView").hidden = true; showStudent("form");
+}
+
+/* ======================= START ======================= */
+(async function boot(){
+  const params = new URLSearchParams(location.search);
+  if(params.has("host")){ startHost(); return; }
+  const urlCode = (params.get("code") || "").toUpperCase().replace(/[^A-Z]/g, "").slice(0,4);
+  const saved = store.get("306student");
+  if(saved && (!urlCode || urlCode === saved.code)){
+    try{
+      const uid = await signIn();
+      const mine = await get(ref(db, `games/${saved.code}/players/${uid}`));
+      if(mine.exists()){ watchMySpot(saved.code, uid, saved.name); return; }
+    }catch(e){}
+    store.del("306student");
+  }
+  showStudent("form");
+  if(urlCode){ $("#codeInput").value = urlCode; $("#nameInput").focus(); }
+})();
+</script>
+</body>
+</html>
